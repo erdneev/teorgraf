@@ -3,9 +3,49 @@
 #include <iostream>
 #include <vector>
 #include <fstream>
+#include <algorithm>
+#include <queue>
 
 using namespace std;
-
+struct Bucket {
+    vector<int> B;
+    vector<int> fw;
+    vector<int> bw;
+    Bucket(int n, int mx) {
+        fw.assign(n, -1);
+        bw.assign(n, -1);
+        B.assign(n*mx, -1);
+    }
+    int get(int dist) {
+        int v = -1;
+        v = B[dist];
+        if (v != -1) {
+            B[dist] = fw[v];
+        }
+        return v;
+    }
+    void insert(int v, int k) {
+        int now = B[k];
+        B[k] = v;
+        fw[v] = now;
+        if (now != -1) {
+            bw[now] = v;
+        }
+    }
+    void remove(int v, int k) {
+        int nex = fw[v];
+        int bac = bw[v];
+        if (B[k] == v) {
+            B[k] = nex;
+        }
+        else {
+            fw[bac] = nex;
+            if (nex != -1) {
+                bw[nex] = bac;
+            }
+        }
+    }
+};
 class Graph {
 public:
     int N, M;
@@ -16,6 +56,7 @@ public:
     vector<int> W;
     vector<int> d;
     vector<int> del;
+    vector<int> p;
     vector<int> color;
     Graph(int N):N(N), M(0) {
         H.assign(N, -1);
@@ -35,7 +76,6 @@ public:
         color.assign(N, -1);
         for (int i = 0; i < I.size(); ++i) {
             add(I[i], J[i], 1);
-            add(J[i], I[i], 1);
         }
     };
     Graph(const vector<int>& I, const vector<int>& J,const vector<int>& Weight, int N) :M(0), N(N) {
@@ -45,7 +85,6 @@ public:
         color.assign(N, -1);
         for (int i = 0; i < I.size(); ++i) {
             add(I[i], J[i], Weight[i]);
-            add(J[i], I[i], Weight[i]);
         }
     };
     void Bellman_Ford(const int& s) {
@@ -93,6 +132,66 @@ public:
         if (ind < 0 || ind>=M) throw invalid_argument("You can't delete unexisting edge!");
         del_arc(IJ[ind].first, IJ[ind].second);
     }
+    void Djikstra(const int& s) {
+        d.assign(N, -1);
+        d[s] = 0;
+        p.assign(N, -1);
+        priority_queue<pair<int, int> > q;
+        q.push({ 0,s });
+        while (!q.empty()) {
+            int dist = -q.top().first;
+            int v = q.top().second;
+            q.pop();
+            if (dist > d[v]) continue;
+            for (int i = H[v]; i != -1; i = L[i]) {
+                int w = W[i];
+                int to = IJ[i].second;
+                if (d[to] == -1 || d[to] > d[v] + w) {
+                    d[to] = d[v] + w;
+                    p[to] = v;
+                    q.push({ -d[to], to });
+                }
+            }
+        }
+    }
+    void ch_Djikstra(const int& s) {
+        d.assign(N, -1);
+        p.assign(N, -1);
+        int mx = 0;
+        for (int i = 0; i < M; ++i) {
+            mx = max(mx, W[i]);
+        }
+        Bucket ch = Bucket(N, mx);
+        d[s] = 0;
+        ch.insert(s, 0);
+        for (int cur = 0; cur < ch.B.size(); ++cur) {
+            while (true) {
+                int v = ch.get(cur);
+                if (v == -1) break;
+                for (int i = H[v]; i != -1; i = L[i]) {
+                    int to = IJ[i].second;
+                    int w = W[i];
+                    if (d[to] == -1 || d[to] > d[v] + w) {
+                        if (d[to] != -1) ch.remove(to, d[to]);
+                        d[to] = cur + w;
+                        p[to] = v;
+                        ch.insert(to, d[to]);
+                    }
+                }
+            }
+        }
+    }
+
+    void print_distances(ofstream& Os, const string& path) {
+        Os.open(path);
+        Os << "digraph G { \n";
+        for (int i = 0; i < N; ++i) {
+            if (p[i] == -1) continue;
+            Os << p[i] + 1 << "->" << i + 1 << "[label = " << d[i] - d[p[i]] << "];\n";
+        }
+        Os << "}";
+        Os.close();
+    }
     void find_components() {
         int c = 0;
         for (int i = 0; i < N; ++i) {
@@ -113,51 +212,27 @@ public:
         }
     }
 };
-int n, m;
-vector < vector<long long> > d;
 
-
-void calc(int x = 0, int y = 0, int mask = 0, int next_mask = 0)
-{
-    if (x == n)
-        return;
-    if (y >= m)
-        d[x + 1][next_mask] += d[x][mask];
-    else
-    {
-        int my_mask = 1 << y;
-        if (mask & my_mask)
-            calc(x, y + 1, mask, next_mask);
-        else
-        {
-            calc(x, y + 1, mask, next_mask | my_mask);
-            if (y + 1 < m && !(mask & my_mask) && !(mask & (my_mask << 1)))
-                calc(x, y + 2, mask, next_mask);
-        }
-    }
-}
 
 int main()
 {
     freopen("input.txt", "r", stdin);
-    freopen("output.txt", "w", stdout);
+   // freopen("output.txt", "w", stdout);
+    int n, m;
     cin >> n >> m;
-
-    d.resize(n + 1, vector<long long>(1 << m));
-    d[0][0] = 1;
-    for (int x = 0; x<n; ++x)
-        for (int mask = 0; mask<(1 << m); ++mask)
-            calc(x, 0, mask, 0);
-
-    for (int i = 0; i <= n; ++i) {
-        for (int j = 0; j < (1 << m); ++j) {
-            cout << d[i][j] << ' ';
-        }
-        cout << '\n';
+    vector<int> I(m);
+    vector<int> J(m);
+    vector<int> W(m);
+    for (int i = 0; i < m; ++i) {
+        int a, b, c;
+        cin >> a >> b >> c;
+        a--; b--;
+        I[i] = a;
+        J[i] = b;
+        W[i] = c;
     }
-    cout << d[n][0];
-    //ofstream output_file;
- //   g.print(output_file, "output.txt");
- //   g.del_arc(1, 4);
-//    g.print(output_file, "output.txt");
+    Graph a = Graph(I, J, W, n);
+    a.ch_Djikstra(0);
+    ofstream output_file;
+    a.print_distances(output_file, "output.txt");
 }
